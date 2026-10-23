@@ -203,13 +203,27 @@ The upload route authenticates exactly like `POST .../sensor_event`:
 | `200 {"data": {"id": "<file id>", "duplicate": true}}` | Same participant, spec, `start_timestamp`, and `sha256` already stored | Delete the local frame |
 | `409` | Same participant, spec, and `start_timestamp` already stored with a different `sha256` | Move the frame to quarantine; don't retry |
 | `400` | A field is missing or invalid | Move the frame to quarantine; don't retry |
-| `401`, `403` | Not authenticated or not authorized | Keep the frame; retry after the session is refreshed |
+| `401`, `403` | Not authenticated or not authorized | Keep the frame; refresh the session, then retry with exponential backoff |
 | `413` | Frame larger than 4 MiB | Move the frame to quarantine; never retry |
 | `5xx` or network error | Transient failure | Keep the frame; retry with exponential backoff |
 | Any other status (for example `404` or `429`) | Unexpected | Keep the frame; retry with exponential backoff |
 
-Error bodies have the form `{"error": "<status>.<slug>"}`, for example
-`{"error": "409.frame-conflict"}`.
+LAMP-server answers `403`, not `401`, when a mobile token is expired or invalid,
+so refresh the session on either status.
+
+Error bodies, including authentication failures, have the form
+`{"error": "<status>.<slug>"}`, for example `{"error": "409.frame-conflict"}`.
+Some errors add a `detail` string for people; don't parse it. Branch on the
+HTTP status, not the slug. The slugs are:
+
+| Status | Slugs |
+|---|---|
+| `400` (upload) | `expected-multipart-form-data`, `malformed-multipart`, `unexpected-file-part`, `too-many-fields`, `frame-before-fields`, `invalid-fields`, `missing-frame`, `sha256-mismatch`, `codec-mismatch` |
+| `400` (list) | `invalid-query`, `invalid-cursor` |
+| `403` | For example `no-such-credentials` or `security-context-out-of-scope` |
+| `404` (download) | `frame-not-found` |
+| `409` | `frame-conflict` |
+| `413` | `frame-too-large` |
 
 Two concurrent uploads with the same participant, spec, and `start_timestamp`
 but different `sha256` values can both be stored, because the unique index
