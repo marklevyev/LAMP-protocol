@@ -2811,38 +2811,89 @@ paths:
                 required:
                 - data
         '400':
-          description: A field is missing, invalid, or sent after the `frame` part. Don't retry.
+          description: |
+            A field is missing or invalid, a field arrives after the `frame` part, the `frame` bytes
+            don't hash to `sha256`, or the frame doesn't start with its codec's magic number (for
+            `openzl`, the little-endian `uint32` minus `0xD7B1A5C0` must equal `codec_format_version`;
+            for `zstd`, the bytes `28 B5 2F FD`). Move the frame to quarantine; don't retry.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                codec-mismatch:
+                  value:
+                    error: 400.codec-mismatch
+                expected-multipart-form-data:
+                  value:
+                    error: 400.expected-multipart-form-data
+                frame-before-fields:
+                  value:
+                    error: 400.frame-before-fields
+                invalid-fields:
+                  value:
+                    error: 400.invalid-fields
+                malformed-multipart:
+                  value:
+                    error: 400.malformed-multipart
+                missing-frame:
+                  value:
+                    error: 400.missing-frame
+                sha256-mismatch:
+                  value:
+                    error: 400.sha256-mismatch
+                too-many-fields:
+                  value:
+                    error: 400.too-many-fields
+                unexpected-file-part:
+                  value:
+                    error: 400.unexpected-file-part
         '401':
-          description: Not authenticated. Retry after you refresh the session.
+          description: Not authenticated. Keep the frame, refresh the session, and retry with exponential
+            backoff.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
         '403':
-          description: Not authorized for this Participant. Retry after you refresh the session.
+          description: Not authorized, or the mobile token is expired or invalid (LAMP-server answers `403`,
+            not `401`, for an expired token). Keep the frame, refresh the session, and retry with
+            exponential backoff.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                no-such-credentials:
+                  value:
+                    error: 403.no-such-credentials
+                security-context-out-of-scope:
+                  value:
+                    error: 403.security-context-out-of-scope
         '409':
           description: A frame with this Participant, `sensor_spec`, and `start_timestamp` is already stored
-            with a different `sha256`. Don't retry.
+            with a different `sha256`. Move the frame to quarantine; don't retry.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                frame-conflict:
+                  value:
+                    error: 409.frame-conflict
         '413':
-          description: The `frame` part is larger than 4 MiB. Never retry.
+          description: The `frame` part is larger than 4 MiB. Move the frame to quarantine; never retry.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                frame-too-large:
+                  value:
+                    error: 413.frame-too-large
         default:
-          description: Error. Retry `5xx` responses with exponential backoff.
+          description: Error. Keep the frame, and retry `5xx` and any other unlisted status (for example
+            `404` or `429`) with exponential backoff.
           content:
             application/json:
               schema:
@@ -2960,17 +3011,31 @@ paths:
                 frames:
                   "$ref": "#/components/examples/SensorStreamFrameList"
         '400':
-          description: A query parameter is missing or invalid.
+          description: A query parameter is missing or invalid, or `cursor` isn't a `next` value.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                invalid-cursor:
+                  value:
+                    error: 400.invalid-cursor
+                invalid-query:
+                  value:
+                    error: 400.invalid-query
         '403':
           description: The API key can't read this Participant.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                no-such-credentials:
+                  value:
+                    error: 403.no-such-credentials
+                security-context-out-of-scope:
+                  value:
+                    error: 403.security-context-out-of-scope
         default:
           description: Error
           content:
@@ -3025,9 +3090,12 @@ paths:
           description: The compressed frame.
           headers:
             ETag:
-              description: The frame's `sha256`.
+              description: The frame's `sha256`, quoted as RFC 9110 requires (`"<sha256>"`). To verify
+                integrity, hash the bytes you received and compare the digest with the unquoted value.
               schema:
                 type: string
+                pattern: '^"[0-9a-f]{64}"$'
+              example: '"a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6"'
           content:
             application/octet-stream:
               schema:
@@ -3038,13 +3106,24 @@ paths:
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                no-such-credentials:
+                  value:
+                    error: 403.no-such-credentials
+                security-context-out-of-scope:
+                  value:
+                    error: 403.security-context-out-of-scope
         '404':
           description: No frame with this ID belongs to the Participant.
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/Error"
+                "$ref": "#/components/schemas/SensorStreamError"
+              examples:
+                frame-not-found:
+                  value:
+                    error: 404.frame-not-found
         default:
           description: Error
           content:
@@ -4475,7 +4554,8 @@ components:
           type: string
           format: binary
           description: The compressed frame, at most 4 MiB (4,194,304 bytes). Send it last, as
-            `application/octet-stream`.
+            `application/octet-stream`. Clients name the file `frame.<codec>`; the server accepts any
+            filename.
       required:
       - sensor_spec
       - start_timestamp
@@ -4566,7 +4646,7 @@ components:
           type: string
           pattern: "^[0-9a-f]{64}$"
           description: The lowercase hex SHA-256 digest of the compressed bytes. The download's `ETag`
-            has the same value.
+            is this value quoted (`"<sha256>"`).
           example: a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6
         byte_length:
           type: integer
@@ -4608,6 +4688,22 @@ components:
           codec_format_version:
             enum:
             - 0
+    SensorStreamError:
+      type: object
+      description: The error body of the sensor-stream operations. Branch on the HTTP status; `error`
+        names the cause, and `detail`, when present, is for people, not code.
+      properties:
+        error:
+          type: string
+          pattern: "^[1-5][0-9]{2}\\.[a-z0-9-]+$"
+          description: The HTTP status and a slug, as `<status>.<slug>`.
+          example: 409.frame-conflict
+        detail:
+          type: string
+          description: A human-readable explanation. Don't parse it.
+          example: a different frame is already stored for this start_timestamp
+      required:
+      - error
     Credential:
       type: object
       description: Every object can have one or more credential(s) associated with
@@ -4644,7 +4740,7 @@ components:
       required: true
       schema:
         type: string
-      description: The Participant ID.
+      description: The Participant ID. Pass `me` to mean the Participant that the credential belongs to.
       example: U1234567890
   examples:
     SensorSpec.lamp.gps1m:

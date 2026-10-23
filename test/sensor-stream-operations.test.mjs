@@ -13,6 +13,7 @@ import {
   loadOpenApi,
   requireExample,
   requireOperation,
+  requireSchema,
   resolveRef,
   schemaValidator,
   validatorAt,
@@ -155,4 +156,110 @@ describe('SensorStreamFrame schema', () => {
       assertInvalid(validate, mutate(frame), `frame with ${label}`);
     });
   }
+});
+
+// The contract amendments that clients and readers can observe on the wire.
+describe('sensor-stream contract amendments', () => {
+  const ERROR_SLUGS = {
+    [`POST ${COLLECTION}`]: {
+      400: [
+        'codec-mismatch',
+        'expected-multipart-form-data',
+        'frame-before-fields',
+        'invalid-fields',
+        'malformed-multipart',
+        'missing-frame',
+        'sha256-mismatch',
+        'too-many-fields',
+        'unexpected-file-part',
+      ],
+      409: ['frame-conflict'],
+      413: ['frame-too-large'],
+    },
+    [`GET ${COLLECTION}`]: { 400: ['invalid-cursor', 'invalid-query'] },
+    [`GET ${ITEM}`]: { 404: ['frame-not-found'] },
+  };
+  const OPERATIONS = { [`POST ${COLLECTION}`]: [COLLECTION, 'post'], [`GET ${COLLECTION}`]: [COLLECTION, 'get'], [`GET ${ITEM}`]: [ITEM, 'get'] };
+
+  test('SensorStreamError requires an error of the form <status>.<slug>', () => {
+    const validate = schemaValidator(ajv, doc, 'SensorStreamError');
+    assertValid(validate, { error: '409.frame-conflict' }, '409.frame-conflict');
+    assertValid(validate, { error: '400.invalid-fields', detail: 'sample_count: too big' }, 'error with detail');
+    for (const bad of [{}, { message: '403.no-such-credentials' }, { error: 'frame-conflict' }, { error: '409' }, { error: 409 }]) {
+      assertInvalid(validate, bad, `error body ${JSON.stringify(bad)}`);
+    }
+  });
+
+  for (const [label, [path, method]] of Object.entries(OPERATIONS)) {
+    test(`${label} documents every error response with SensorStreamError and its status`, () => {
+      const op = requireOperation(doc, path, method);
+      for (const [code, response] of Object.entries(op.responses)) {
+        if (code === '200' || code === 'default') continue;
+        const media = response.content?.['application/json'];
+        assert.equal(media?.schema?.$ref, '#/components/schemas/SensorStreamError', `${label} ${code} schema`);
+        const validate = schemaValidator(ajv, doc, 'SensorStreamError');
+        for (const [name, example] of Object.entries(media.examples ?? {})) {
+          assertValid(validate, example.value, `${label} ${code} example ${name}`);
+          assert.ok(example.value.error.startsWith(`${code}.`), `${label} ${code} example ${name} has status ${example.value.error}`);
+        }
+      }
+    });
+
+    for (const [code, slugs] of Object.entries(ERROR_SLUGS[label])) {
+      test(`${label} ${code} lists the server's slugs as examples`, () => {
+        const op = requireOperation(doc, path, method);
+        const examples = op.responses?.[code]?.content?.['application/json']?.examples ?? {};
+        const errors = Object.values(examples).map((example) => example.value?.error).sort();
+        assert.deepEqual(errors, slugs.map((slug) => `${code}.${slug}`));
+      });
+    }
+  }
+
+  test('the upload 400 names the sha256 and codec magic-number checks', () => {
+    const { description } = requireOperation(doc, COLLECTION, 'post').responses['400'];
+    assert.match(description, /sha256/);
+    assert.match(description, /magic number/);
+  });
+
+  test('the upload says to retry 5xx and any other unlisted status with backoff', () => {
+    const { description } = requireOperation(doc, COLLECTION, 'post').responses.default;
+    assert.match(description, /5xx/);
+    assert.match(description, /any other/i);
+    assert.match(description, /exponential backoff/);
+  });
+
+  test('the upload 401 and 403 say to refresh the session and back off; 403 covers expired tokens', () => {
+    const { responses } = requireOperation(doc, COLLECTION, 'post');
+    for (const code of ['401', '403']) {
+      assert.match(responses[code].description, /refresh/i, `${code} description`);
+      assert.match(responses[code].description, /backoff/, `${code} description`);
+    }
+    assert.match(responses['403'].description, /expired/);
+  });
+
+  test('the frame part accepts any filename', () => {
+    assert.match(requireSchema(doc, 'SensorStreamUpload').properties.frame.description, /any filename/);
+  });
+
+  test('participant_id documents the me alias', () => {
+    const param = resolveRef(doc, { $ref: '#/components/parameters/SensorStreamParticipantId' });
+    assert.match(param.description, /`me`/);
+  });
+
+  test("the download's ETag is the quoted sha256", () => {
+    const etag = requireOperation(doc, ITEM, 'get').responses['200'].headers.ETag;
+    assert.match(etag.description, /quoted/);
+    assert.match(etag.description, /hash/);
+    const validate = validatorAt(ajv, ['paths', ITEM, 'get', 'responses', '200', 'headers', 'ETag', 'schema']);
+    const sha = 'a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6';
+    assertValid(validate, `"${sha}"`, 'quoted sha256');
+    assertInvalid(validate, sha, 'bare sha256');
+    assertInvalid(validate, `W/"${sha}"`, 'weak ETag');
+  });
+
+  test("SensorStreamFrame.sha256 says the ETag quotes it, not that they're equal", () => {
+    const { description } = requireSchema(doc, 'SensorStreamFrame').properties.sha256;
+    assert.doesNotMatch(description, /same value/);
+    assert.match(description, /quoted/);
+  });
 });
