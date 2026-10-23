@@ -26,5 +26,5 @@ npm test
 ```
 
 `npm test` runs `redocly lint` on `openapi.yml` and then the schema tests in
-`test/`. Lint fails only on problems that aren't already recorded in
-`.redocly.lint-ignore.yaml` (see `redocly.yaml`).
+`test/`. Lint fails on any problem, warning or error, that isn't already
+recorded in `.redocly.lint-ignore.yaml` (see `redocly.yaml`).

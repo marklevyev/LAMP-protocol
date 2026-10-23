@@ -2,8 +2,9 @@
 #
 # `.redocly.lint-ignore.yaml` records the problems that `openapi.yml` already had
 # before the sensor-stream change (8 errors, 61 warnings with @redocly/cli 1.34.5),
-# generated with `redocly lint --generate-ignore-file`. Lint fails only on new
-# errors.
+# generated with `redocly lint --generate-ignore-file`. The `recommended-strict`
+# ruleset makes every rule of `recommended` an error, so lint fails on any new
+# problem, warning-level ones included. `test/lint-gate.test.mjs` checks this.
 #
 # One entry was added by hand: `no-invalid-media-type-examples` on the `200`
 # response of `GET /sensor_spec/{id}`. Redocly's example validator can't compile
@@ -13,7 +14,4 @@
 #
 # Don't add other entries to the ignore file; fix the problem instead.
 extends:
-  - recommended
-rules:
-  # Fail lint, not just warn, when a documented example doesn't match its schema.
-  no-invalid-media-type-examples: error
+  - recommended-strict
