@@ -1,0 +1,84 @@
+# This file instructs Redocly's linter to ignore the rules contained for specific parts of your API.
+# See https://redocly.com/docs/cli/ for more information.
+openapi.yml:
+  info-license:
+    - '#/info'
+  operation-4xx-response:
+    - '#/paths/~1/get/responses'
+    - '#/paths/~1/post/responses'
+    - '#/paths/~1activity_spec/get/responses'
+    - '#/paths/~1activity_spec/post/responses'
+    - '#/paths/~1activity_spec~1{id}/get/responses'
+    - '#/paths/~1activity_spec~1{id}/put/responses'
+    - '#/paths/~1activity_spec~1{id}/delete/responses'
+    - '#/paths/~1sensor_spec/get/responses'
+    - '#/paths/~1sensor_spec/post/responses'
+    - '#/paths/~1sensor_spec~1{id}/get/responses'
+    - '#/paths/~1sensor_spec~1{id}/put/responses'
+    - '#/paths/~1sensor_spec~1{id}/delete/responses'
+    - '#/paths/~1tag_spec/get/responses'
+    - '#/paths/~1tag_spec/post/responses'
+    - '#/paths/~1tag_spec~1{id}/get/responses'
+    - '#/paths/~1tag_spec~1{id}/put/responses'
+    - '#/paths/~1tag_spec~1{id}/delete/responses'
+    - '#/paths/~1researcher/get/responses'
+    - '#/paths/~1researcher/post/responses'
+    - '#/paths/~1researcher~1{id}/get/responses'
+    - '#/paths/~1researcher~1{id}/put/responses'
+    - '#/paths/~1researcher~1{id}/delete/responses'
+    - '#/paths/~1researcher~1{id}~1study/get/responses'
+    - '#/paths/~1researcher~1{id}~1study/post/responses'
+    - '#/paths/~1study~1{id}/get/responses'
+    - '#/paths/~1study~1{id}/put/responses'
+    - '#/paths/~1study~1{id}/delete/responses'
+    - '#/paths/~1study~1{id}~1participant/get/responses'
+    - '#/paths/~1study~1{id}~1participant/post/responses'
+    - '#/paths/~1participant~1{id}/get/responses'
+    - '#/paths/~1participant~1{id}/put/responses'
+    - '#/paths/~1participant~1{id}/delete/responses'
+    - '#/paths/~1study~1{id}~1activity/get/responses'
+    - '#/paths/~1study~1{id}~1activity/post/responses'
+    - '#/paths/~1activity~1{id}/get/responses'
+    - '#/paths/~1activity~1{id}/put/responses'
+    - '#/paths/~1activity~1{id}/delete/responses'
+    - '#/paths/~1study~1{id}~1sensor/get/responses'
+    - '#/paths/~1study~1{id}~1sensor/post/responses'
+    - '#/paths/~1sensor~1{id}/get/responses'
+    - '#/paths/~1sensor~1{id}/put/responses'
+    - '#/paths/~1sensor~1{id}/delete/responses'
+    - '#/paths/~1participant~1{id}~1activity/get/responses'
+    - '#/paths/~1participant~1{id}~1sensor/get/responses'
+    - '#/paths/~1activity~1{id}~1participant/get/responses'
+    - '#/paths/~1sensor~1{id}~1participant/get/responses'
+    - '#/paths/~1participant~1{id}~1activity_event/get/responses'
+    - '#/paths/~1participant~1{id}~1activity_event/post/responses'
+    - '#/paths/~1participant~1{id}~1sensor_event/get/responses'
+    - '#/paths/~1participant~1{id}~1sensor_event/post/responses'
+    - '#/paths/~1type~1{id}~1tag/get/responses'
+    - '#/paths/~1type~1{id}~1tag~1{key}/get/responses'
+    - '#/paths/~1type~1{id}~1tag~1{key}~1{target}/put/responses'
+    - '#/paths/~1type~1{id}~1credential/get/responses'
+    - '#/paths/~1type~1{id}~1credential/post/responses'
+    - '#/paths/~1type~1{id}~1credential~1{access_key}/get/responses'
+    - '#/paths/~1type~1{id}~1credential~1{access_key}/put/responses'
+    - '#/paths/~1type~1{id}~1credential~1{access_key}/delete/responses'
+    - '#/paths/~1type~1{id}~1parent/get/responses'
+  struct:
+    - >-
+      #/components/schemas/ActivityEvent/properties/temporal_slices/items/properties/item/nullable
+    - >-
+      #/components/schemas/ActivityEvent/properties/temporal_slices/items/properties/value/nullable
+    - >-
+      #/components/schemas/ActivityEvent/properties/temporal_slices/items/properties/type/nullable
+    - >-
+      #/components/schemas/ActivityEvent/properties/temporal_slices/items/properties/duration/nullable
+    - >-
+      #/components/schemas/ActivityEvent/properties/temporal_slices/items/properties/level/nullable
+    - >-
+      #/paths/~1type~1{id}~1tag~1{key}~1{target}/put/requestBody/content/application~1json/schema/nullable
+    - >-
+      #/paths/~1type~1{id}~1tag~1{key}~1{target}/put/responses/200/content/application~1json/schema/properties/data/nullable
+  no-unused-components:
+    - '#/components/schemas/CRONSchedule'
+  security-defined:
+    - '#/paths/~1/get'

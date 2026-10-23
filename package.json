@@ -1,0 +1,22 @@
+{
+  "name": "lamp-protocol",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The LAMP Protocol OpenAPI document and its validation tests.",
+  "license": "BSD-3-Clause",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "REDOCLY_TELEMETRY=off REDOCLY_SUPPRESS_UPDATE_NOTICE=true redocly lint openapi.yml",
+    "test:schemas": "node --test 'test/*.test.mjs'",
+    "test": "npm run lint && npm run test:schemas"
+  },
+  "devDependencies": {
+    "@redocly/cli": "1.34.5",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.9.1"
+  }
+}
