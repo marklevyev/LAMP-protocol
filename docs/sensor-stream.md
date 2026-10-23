@@ -77,6 +77,19 @@ A frame holds the records of one participant, one sensor spec, and one
 - **A window can have more than one frame.** This happens after a collector
   restart, after a process death, or when a late hardware batch arrives after
   its window was closed. Readers merge every frame of a window.
+- A frame holds at most 66,000 records (the server's `sample_count` limit). If a
+  window collects more, close the frame and continue the window in a new frame.
+
+### Which sensors run together
+
+A study can configure more than one accelerometer sensor. Clients resolve the
+configuration like this:
+- If more than one `lamp.accelerometer*hz` tier is configured, collect only the
+  fastest one.
+- If any tier is configured, don't collect the legacy 5 Hz `lamp.accelerometer`
+  JSON stream. `lamp.device_motion` is unaffected.
+- `lamp.gps1m` runs alongside `lamp.gps` when both are configured; each emits
+  its own `sensor` name.
 
 ### Splitting and closing frames
 
@@ -130,6 +143,13 @@ Use zstd only where OpenZL is unavailable (32-bit Android ABIs).
 - Readers still pass `max_output_size = sample_count * 20`, so a frame without a
   content size decodes too.
 
+### Merging frames
+
+When a reader combines frames, it drops a record only when an identical record
+(all four fields equal) appears in a *different* frame of the same window, for
+example after a client re-sent a partial frame. Identical records inside one
+frame are real samples that share a millisecond; keep them.
+
 ### Decoder checks
 
 A decoder must check each frame in this order, and reject the frame on the
@@ -159,7 +179,13 @@ required field.
 | `platform` | text | `android` or `ios` |
 | `unit` | text | `m/s^2` |
 | `sha256` | text | Lowercase hex SHA-256 of the compressed bytes |
-| `frame` | file | Compressed frame, `application/octet-stream`, at most 4 MiB |
+| `frame` | file | Compressed frame, `application/octet-stream`, at most 4 MiB; clients name it `frame.<codec>`, and the server accepts any filename |
+
+The server never decompresses a frame. Besides the field rules, it checks that
+the frame bytes hash to `sha256` and that the frame starts with the codec's magic
+number: for `openzl`, the little-endian `uint32` minus `0xD7B1A5C0` equals
+`codec_format_version`; for `zstd`, the first bytes are `28 B5 2F FD`. You can
+pass `me` as `participant_id` to mean the authenticated participant.
 
 ### Authentication
 
@@ -180,6 +206,14 @@ The upload route authenticates exactly like `POST .../sensor_event`:
 | `401`, `403` | Not authenticated or not authorized | Keep the frame; retry after the session is refreshed |
 | `413` | Frame larger than 4 MiB | Move the frame to quarantine; never retry |
 | `5xx` or network error | Transient failure | Keep the frame; retry with exponential backoff |
+| Any other status (for example `404` or `429`) | Unexpected | Keep the frame; retry with exponential backoff |
+
+Error bodies have the form `{"error": "<status>.<slug>"}`, for example
+`{"error": "409.frame-conflict"}`.
+
+Two concurrent uploads with the same participant, spec, and `start_timestamp`
+but different `sha256` values can both be stored, because the unique index
+includes `sha256`. Readers merge them like any other frames of the window.
 
 ## Read
 
@@ -200,6 +234,9 @@ Lists frame metadata. Query parameters:
 
 A frame matches when it overlaps `[from, to)`: `end_timestamp >= from` and
 `start_timestamp < to`. Results are sorted by `start_timestamp`, then `id`.
+The server's range is half-open. Each Python loader documents its own range
+convention: LAMP-cortex treats `end` as inclusive (its raw-feature convention),
+and LAMP-raphe uses half-open `[start_ms, end_ms)`.
 
 ```json
 {
@@ -214,8 +251,8 @@ A frame matches when it overlaps `[from, to)`: `end_timestamp >= from` and
       "codec_format_version": 24,
       "platform": "android",
       "unit": "m/s^2",
-      "byte_length": 2311,
-      "sha256": "…",
+      "byte_length": 4188,
+      "sha256": "a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6",
       "upload_date": "2026-10-23T12:00:00.000Z"
     }
   ],
@@ -226,8 +263,9 @@ A frame matches when it overlaps `[from, to)`: `end_timestamp >= from` and
 ### `GET /participant/{participant_id}/sensor-stream/{file_id}`
 
 Returns the compressed frame bytes as `application/octet-stream`, with an
-`ETag` equal to the frame's `sha256`. Returns `404` when the file doesn't
-belong to the participant.
+`ETag` of the quoted `sha256` (`"<sha256>"`, as RFC 9110 requires). Readers
+verify integrity by hashing the bytes they received. Returns `404` when the file
+doesn't belong to the participant.
 
 ## Storage
 
@@ -246,8 +284,8 @@ is:
   "codec_format_version": 24,
   "platform": "android",
   "unit": "m/s^2",
-  "byte_length": 2311,
-  "sha256": "…"
+  "byte_length": 4188,
+  "sha256": "a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6"
 }
 ```
 
