@@ -5,10 +5,11 @@
 # generated with `redocly lint --generate-ignore-file`. Lint fails only on new
 # errors.
 #
-# One entry was added by hand: `no-invalid-media-type-examples` on
-# `POST /sensor_spec`. Redocly's example validator can't compile the existing
-# `JSONSchema` component, which uses OpenAPI 3.0's boolean `exclusiveMinimum`.
-# `test/sensor-specs.test.mjs` validates those examples instead.
+# One entry was added by hand: `no-invalid-media-type-examples` on the `200`
+# response of `GET /sensor_spec/{id}`. Redocly's example validator can't compile
+# the existing `JSONSchema` component, which uses OpenAPI 3.0's boolean
+# `exclusiveMinimum`. `test/sensor-specs.test.mjs` validates every example in
+# that response's `examples` map against the response schema instead.
 #
 # Don't add other entries to the ignore file; fix the problem instead.
 extends:

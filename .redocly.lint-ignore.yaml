@@ -84,7 +84,8 @@ openapi.yml:
     - '#/paths/~1/get'
   # Added with the sensor-stream change, by hand. Redocly can't compile the
   # existing JSONSchema component (OpenAPI 3.0 boolean exclusiveMinimum), so it
-  # can't check the SensorSpec examples here. test/sensor-specs.test.mjs checks
-  # them instead.
+  # can't check the SensorSpec examples of GET /sensor_spec/{id} here.
+  # test/sensor-specs.test.mjs validates every example in that operation's
+  # examples map against the response schema instead.
   no-invalid-media-type-examples:
-    - '#/paths/~1sensor_spec/post/requestBody/content/application~1json/schema'
+    - '#/paths/~1sensor_spec~1{id}/get/responses/200/content/application~1json/schema'
