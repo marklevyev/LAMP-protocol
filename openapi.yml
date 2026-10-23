@@ -4678,18 +4678,16 @@ components:
               title: Altitude
               type: number
               format: double
-              description: Altitude in meters.
+              description: Altitude in meters. Omitted when the fix has no altitude.
             accuracy:
               title: Accuracy
               type: number
               format: double
               minimum: 0
-              description: Horizontal accuracy radius in meters.
+              description: Horizontal accuracy radius in meters. Omitted when the fix has no accuracy.
           required:
           - latitude
           - longitude
-          - altitude
-          - accuracy
     SensorSpec.lamp.accelerometer10hz:
       summary: lamp.accelerometer10hz
       description: 10 Hz accelerometer, uploaded as binary frames through `SensorStream.create`.

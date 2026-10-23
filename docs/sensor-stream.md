@@ -314,6 +314,9 @@ same `data` shape as `lamp.gps`:
 }
 ```
 
+`latitude` and `longitude` are required. `altitude` and `accuracy` are optional:
+a client omits them when the fix doesn't have them.
+
 - Android requests `PRIORITY_HIGH_ACCURACY` updates with a 60,000 ms interval
   and a 60,000 ms fastest interval.
 - iOS uses `kCLLocationAccuracyBest` with continuous background updates and

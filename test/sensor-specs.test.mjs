@@ -91,9 +91,24 @@ describe(`${GPS_SPEC} sensor_event`, () => {
   });
 
   const valid = { latitude: 42.3389, longitude: -71.1066, altitude: 12.5, accuracy: 4.8 };
+
+  // Android omits `altitude` and `accuracy` when the fix lacks them, and iOS models
+  // `altitude` as optional, so only the coordinates are required.
+  for (const [label, good] of Object.entries({
+    'a missing altitude': { latitude: 42.3389, longitude: -71.1066, accuracy: 4.8 },
+    'a missing accuracy': { latitude: 42.3389, longitude: -71.1066, altitude: 12.5 },
+    'only latitude and longitude': { latitude: 42.3389, longitude: -71.1066 },
+  })) {
+    test(`data with ${label} is valid`, () => {
+      const validate = compileEmbedded(requireExample(doc, `SensorSpec.${GPS_SPEC}`).data_schema);
+      assertValid(validate, good, `${GPS_SPEC} data with ${label}`);
+    });
+  }
+
   for (const [label, bad] of Object.entries({
     'a missing latitude': { longitude: -71.1066, altitude: 12.5, accuracy: 4.8 },
-    'a missing accuracy': { latitude: 42.3389, longitude: -71.1066, altitude: 12.5 },
+    'a missing longitude': { latitude: 42.3389, altitude: 12.5, accuracy: 4.8 },
+    'a string altitude': { ...valid, altitude: '12.5' },
     'a string latitude': { ...valid, latitude: '42.3389' },
     'latitude 91': { ...valid, latitude: 91 },
     'longitude -181': { ...valid, longitude: -181 },
