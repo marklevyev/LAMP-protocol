@@ -82,3 +82,9 @@ openapi.yml:
     - '#/components/schemas/CRONSchedule'
   security-defined:
     - '#/paths/~1/get'
+  # Added with the sensor-stream change, by hand. Redocly can't compile the
+  # existing JSONSchema component (OpenAPI 3.0 boolean exclusiveMinimum), so it
+  # can't check the SensorSpec examples here. test/sensor-specs.test.mjs checks
+  # them instead.
+  no-invalid-media-type-examples:
+    - '#/paths/~1sensor_spec/post/requestBody/content/application~1json/schema'

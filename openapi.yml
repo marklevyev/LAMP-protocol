@@ -39,6 +39,8 @@ tags:
   description: Operations related to the management of ActivityEvents.
 - name: SensorEvent
   description: Operations related to the management of SensorEvents.
+- name: SensorStream
+  description: Operations related to the upload and download of binary sensor frames (high-rate accelerometer).
 - name: Credential
   description: Operations related to the management of Credentials.
 - name: Tag
@@ -392,6 +394,17 @@ paths:
           application/json:
             schema:
               "$ref": "#/components/schemas/SensorSpec"
+            examples:
+              lamp.gps1m:
+                "$ref": "#/components/examples/SensorSpec.lamp.gps1m"
+              lamp.accelerometer10hz:
+                "$ref": "#/components/examples/SensorSpec.lamp.accelerometer10hz"
+              lamp.accelerometer20hz:
+                "$ref": "#/components/examples/SensorSpec.lamp.accelerometer20hz"
+              lamp.accelerometer50hz:
+                "$ref": "#/components/examples/SensorSpec.lamp.accelerometer50hz"
+              lamp.accelerometer100hz:
+                "$ref": "#/components/examples/SensorSpec.lamp.accelerometer100hz"
       responses:
         '200':
           description: Success
@@ -2616,6 +2629,9 @@ paths:
               - type: array
                 items:
                   "$ref": "#/components/schemas/SensorEvent"
+            examples:
+              lamp.gps1m:
+                "$ref": "#/components/examples/SensorEvent.lamp.gps1m"
       responses:
         '200':
           description: Success
@@ -2733,6 +2749,335 @@ paths:
           library(LAMP)
           LAMP.connect("api.lamp.digital", "email@address.com", "password")
           # function-specific sample code here
+  "/participant/{participant_id}/sensor-stream":
+    post:
+      operationId: SensorStream.create
+      summary: Upload a compressed accelerometer frame for a Participant.
+      description: |
+        Upload one compressed frame of 20-byte accelerometer records for a `lamp.accelerometer*hz`
+        sensor. Send every text field before the `frame` file part; the server rejects a request whose
+        file part arrives first. The `frame` part is at most 4 MiB (4,194,304 bytes).
+
+        Retrying the same frame (same Participant, `sensor_spec`, `start_timestamp`, and `sha256`) is
+        safe: the server returns the stored frame's `id` with `duplicate: true`. A different `sha256`
+        for the same Participant, `sensor_spec`, and `start_timestamp` returns `409`.
+
+        The `MobileToken` scheme (`Authorization: Bearer <mobile token>`) is the primary credential.
+        The legacy Basic `Authorization` header works only on servers that enable legacy mobile tokens.
+        See `docs/sensor-stream.md` for the record layout, framing, and codecs.
+      tags:
+      - SensorStream
+      parameters:
+      - "$ref": "#/components/parameters/SensorStreamParticipantId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              "$ref": "#/components/schemas/SensorStreamUpload"
+            encoding:
+              frame:
+                contentType: application/octet-stream
+            examples:
+              lamp.accelerometer10hz:
+                "$ref": "#/components/examples/SensorStreamUpload.lamp.accelerometer10hz"
+              lamp.accelerometer20hz:
+                "$ref": "#/components/examples/SensorStreamUpload.lamp.accelerometer20hz"
+              lamp.accelerometer50hz:
+                "$ref": "#/components/examples/SensorStreamUpload.lamp.accelerometer50hz"
+              lamp.accelerometer100hz:
+                "$ref": "#/components/examples/SensorStreamUpload.lamp.accelerometer100hz"
+      responses:
+        '200':
+          description: The frame is stored, or an identical frame was already stored (`duplicate` is `true`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        description: The stored frame's file ID.
+                        example: 6718a0c2e4b0a1b2c3d4e5f6
+                      duplicate:
+                        type: boolean
+                        description: Present and `true` when this exact frame was already stored.
+                        example: true
+                    required:
+                    - id
+                required:
+                - data
+        '400':
+          description: A field is missing, invalid, or sent after the `frame` part. Don't retry.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '401':
+          description: Not authenticated. Retry after you refresh the session.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '403':
+          description: Not authorized for this Participant. Retry after you refresh the session.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '409':
+          description: A frame with this Participant, `sensor_spec`, and `start_timestamp` is already stored
+            with a different `sha256`. Don't retry.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '413':
+          description: The `frame` part is larger than 4 MiB. Never retry.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        default:
+          description: Error. Retry `5xx` responses with exponential backoff.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+      security:
+      - MobileToken: []
+      - Authorization: []
+      x-code-samples:
+      - lang: js
+        label: JavaScript
+        source: |
+          import LAMP from 'lamp-core'
+          await LAMP.connect({ serverAddress: "api.lamp.digital", accessKey: "email@address.com", secretKey: "password" })
+          // function-specific sample code here
+      - lang: python
+        label: Python
+        source: |
+          import LAMP
+          LAMP.connect("api.lamp.digital", "email@address.com", "password")
+          # function-specific sample code here
+      - lang: go
+        label: R Script
+        source: |
+          library(LAMP)
+          LAMP.connect("api.lamp.digital", "email@address.com", "password")
+          # function-specific sample code here
+      - lang: shell
+        label: cURL
+        source: |
+          curl -X POST "https://api.lamp.digital/participant/U1234567890/sensor-stream" \
+            -H "Authorization: Bearer $MOBILE_TOKEN" \
+            -F sensor_spec=lamp.accelerometer50hz \
+            -F start_timestamp=1790000100000 \
+            -F end_timestamp=1790000109980 \
+            -F sample_count=500 \
+            -F codec=openzl \
+            -F codec_format_version=24 \
+            -F platform=android \
+            -F unit=m/s^2 \
+            -F sha256=a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6 \
+            -F "frame=@frame.openzl;type=application/octet-stream"
+    get:
+      operationId: SensorStream.list
+      summary: List accelerometer frames for a Participant.
+      description: |
+        List the metadata of every frame that overlaps `[from, to)`: a frame matches when
+        `end_timestamp >= from` and `start_timestamp < to`. Results are sorted by `start_timestamp`,
+        then `id`. A 5-minute window can have more than one frame; merge every frame of a window.
+        Pass `next` from the response as `cursor` to read the next page; `next` is `null` on the
+        last page. Download each frame with `SensorStream.view`.
+      tags:
+      - SensorStream
+      parameters:
+      - "$ref": "#/components/parameters/SensorStreamParticipantId"
+      - name: sensor_spec
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - lamp.accelerometer10hz
+          - lamp.accelerometer20hz
+          - lamp.accelerometer50hz
+          - lamp.accelerometer100hz
+        description: The accelerometer sensor spec to list.
+      - name: from
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+          default: 0
+        description: 'The start of the range, inclusive: Unix epoch milliseconds.'
+      - name: to
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+        description: 'The end of the range, exclusive: Unix epoch milliseconds. Defaults to now.'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1000
+          default: 1000
+        description: The maximum number of frames to return.
+      - name: cursor
+        in: query
+        schema:
+          type: string
+        description: The `next` value from the previous page.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      "$ref": "#/components/schemas/SensorStreamFrame"
+                  next:
+                    type: string
+                    nullable: true
+                    description: The cursor for the next page, or `null` on the last page.
+                required:
+                - data
+                - next
+              examples:
+                frames:
+                  "$ref": "#/components/examples/SensorStreamFrameList"
+        '400':
+          description: A query parameter is missing or invalid.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '403':
+          description: The API key can't read this Participant.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+      security:
+      - ApiKeyAuth: []
+      x-code-samples:
+      - lang: js
+        label: JavaScript
+        source: |
+          import LAMP from 'lamp-core'
+          await LAMP.connect({ serverAddress: "api.lamp.digital", accessKey: "email@address.com", secretKey: "password" })
+          // function-specific sample code here
+      - lang: python
+        label: Python
+        source: |
+          import LAMP
+          LAMP.connect("api.lamp.digital", "email@address.com", "password")
+          # function-specific sample code here
+      - lang: go
+        label: R Script
+        source: |
+          library(LAMP)
+          LAMP.connect("api.lamp.digital", "email@address.com", "password")
+          # function-specific sample code here
+      - lang: shell
+        label: cURL
+        source: |
+          curl "https://api.lamp.digital/participant/U1234567890/sensor-stream?sensor_spec=lamp.accelerometer50hz&from=1790000100000&to=1790000400000" \
+            -H "x-api-key: $LAMP_API_KEY"
+  "/participant/{participant_id}/sensor-stream/{file_id}":
+    get:
+      operationId: SensorStream.view
+      summary: Download one accelerometer frame.
+      description: |
+        Download a frame's compressed bytes exactly as they were uploaded. Decode them with the frame's
+        `codec` and check them against its metadata, as `docs/sensor-stream.md` describes.
+      tags:
+      - SensorStream
+      parameters:
+      - "$ref": "#/components/parameters/SensorStreamParticipantId"
+      - name: file_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The frame's `id` from `SensorStream.list`.
+      responses:
+        '200':
+          description: The compressed frame.
+          headers:
+            ETag:
+              description: The frame's `sha256`.
+              schema:
+                type: string
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: The API key can't read this Participant.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: No frame with this ID belongs to the Participant.
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+      security:
+      - ApiKeyAuth: []
+      x-code-samples:
+      - lang: js
+        label: JavaScript
+        source: |
+          import LAMP from 'lamp-core'
+          await LAMP.connect({ serverAddress: "api.lamp.digital", accessKey: "email@address.com", secretKey: "password" })
+          // function-specific sample code here
+      - lang: python
+        label: Python
+        source: |
+          import LAMP
+          LAMP.connect("api.lamp.digital", "email@address.com", "password")
+          # function-specific sample code here
+      - lang: go
+        label: R Script
+        source: |
+          library(LAMP)
+          LAMP.connect("api.lamp.digital", "email@address.com", "password")
+          # function-specific sample code here
+      - lang: shell
+        label: cURL
+        source: |
+          curl -o frame.openzl \
+            "https://api.lamp.digital/participant/U1234567890/sensor-stream/6718a0c2e4b0a1b2c3d4e5f6" \
+            -H "x-api-key: $LAMP_API_KEY"
   "/type/{id}/tag":
     get:
       operationId: Tag.list
@@ -4054,6 +4399,215 @@ components:
       - timestamp
       - sensor
       - data
+    SensorStreamUpload:
+      type: object
+      description: |
+        The `multipart/form-data` fields of `SensorStream.create`, in the order you send them: every
+        text field first, then the `frame` file part. Text fields carry integers as decimal strings.
+
+        A schema can't express two more rules, so the server checks them: `start_timestamp <=
+        end_timestamp`, and both fall in the same 5-minute window (`floor(timestamp / 300000)`).
+        `codec_format_version` is `24` with `openzl` and `0` with `zstd`.
+      properties:
+        sensor_spec:
+          type: string
+          enum:
+          - lamp.accelerometer10hz
+          - lamp.accelerometer20hz
+          - lamp.accelerometer50hz
+          - lamp.accelerometer100hz
+          description: The accelerometer tier that produced the frame.
+          example: lamp.accelerometer50hz
+        start_timestamp:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 'The first record''s timestamp, inclusive: Unix epoch milliseconds.'
+          example: 1790000100000
+        end_timestamp:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 'The last record''s timestamp, inclusive: Unix epoch milliseconds.'
+          example: 1790000109980
+        sample_count:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 66000
+          description: The number of 20-byte records in the decompressed frame (at most 300 s × 200 Hz
+            × 1.1).
+          example: 500
+        codec:
+          type: string
+          enum:
+          - openzl
+          - zstd
+          description: The frame's compression codec. Use `zstd` only where OpenZL is unavailable.
+          example: openzl
+        codec_format_version:
+          type: integer
+          format: int32
+          enum:
+          - 0
+          - 24
+          description: The OpenZL format version (`24`), or `0` for `zstd`.
+          example: 24
+        platform:
+          type: string
+          enum:
+          - android
+          - ios
+          description: The platform that recorded the frame.
+          example: android
+        unit:
+          type: string
+          enum:
+          - m/s^2
+          description: The unit of `x`, `y`, and `z`. Always `m/s^2`.
+          example: m/s^2
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: The lowercase hex SHA-256 digest of the compressed `frame` bytes.
+          example: a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6
+        frame:
+          type: string
+          format: binary
+          description: The compressed frame, at most 4 MiB (4,194,304 bytes). Send it last, as
+            `application/octet-stream`.
+      required:
+      - sensor_spec
+      - start_timestamp
+      - end_timestamp
+      - sample_count
+      - codec
+      - codec_format_version
+      - platform
+      - unit
+      - sha256
+      - frame
+      oneOf:
+      - description: An OpenZL frame at format version 24.
+        properties:
+          codec:
+            enum:
+            - openzl
+          codec_format_version:
+            enum:
+            - 24
+      - description: A zstd frame.
+        properties:
+          codec:
+            enum:
+            - zstd
+          codec_format_version:
+            enum:
+            - 0
+    SensorStreamFrame:
+      type: object
+      description: The metadata of one stored accelerometer frame, as `SensorStream.list` returns it.
+      properties:
+        id:
+          type: string
+          description: The frame's file ID. Pass it to `SensorStream.view` to download the bytes.
+          example: 6718a0c2e4b0a1b2c3d4e5f6
+        sensor_spec:
+          type: string
+          enum:
+          - lamp.accelerometer10hz
+          - lamp.accelerometer20hz
+          - lamp.accelerometer50hz
+          - lamp.accelerometer100hz
+          example: lamp.accelerometer50hz
+        start_timestamp:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 'The first record''s timestamp, inclusive: Unix epoch milliseconds.'
+          example: 1790000100000
+        end_timestamp:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 'The last record''s timestamp, inclusive: Unix epoch milliseconds.'
+          example: 1790000109980
+        sample_count:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 66000
+          example: 500
+        codec:
+          type: string
+          enum:
+          - openzl
+          - zstd
+          example: openzl
+        codec_format_version:
+          type: integer
+          format: int32
+          enum:
+          - 0
+          - 24
+          example: 24
+        platform:
+          type: string
+          enum:
+          - android
+          - ios
+          example: android
+        unit:
+          type: string
+          enum:
+          - m/s^2
+          example: m/s^2
+        sha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: The lowercase hex SHA-256 digest of the compressed bytes. The download's `ETag`
+            has the same value.
+          example: a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6
+        byte_length:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 4194304
+          description: The size of the compressed frame, in bytes.
+          example: 4188
+        upload_date:
+          type: string
+          format: date-time
+          description: When the server stored the frame.
+          example: '2026-10-23T12:00:00.000Z'
+      required:
+      - id
+      - sensor_spec
+      - start_timestamp
+      - end_timestamp
+      - sample_count
+      - codec
+      - codec_format_version
+      - platform
+      - unit
+      - sha256
+      - byte_length
+      - upload_date
+      oneOf:
+      - properties:
+          codec:
+            enum:
+            - openzl
+          codec_format_version:
+            enum:
+            - 24
+      - properties:
+          codec:
+            enum:
+            - zstd
+          codec_format_version:
+            enum:
+            - 0
     Credential:
       type: object
       description: Every object can have one or more credential(s) associated with
@@ -4083,7 +4637,328 @@ components:
       - access_key
       - secret_key
       - description
+  parameters:
+    SensorStreamParticipantId:
+      name: participant_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: The Participant ID.
+      example: U1234567890
+  examples:
+    SensorSpec.lamp.gps1m:
+      summary: lamp.gps1m
+      description: One GPS fix per 60 s, sent as JSON SensorEvents with the same `data` shape as `lamp.gps`.
+      value:
+        id: lamp.gps1m
+        settings_schema:
+          type: object
+          description: lamp.gps1m has no settings. The interval is fixed at 60 s.
+          properties: {}
+          maxProperties: 0
+        data_schema:
+          type: object
+          properties:
+            latitude:
+              title: Latitude
+              type: number
+              format: double
+              minimum: -90
+              maximum: 90
+              description: Latitude in degrees (WGS 84).
+            longitude:
+              title: Longitude
+              type: number
+              format: double
+              minimum: -180
+              maximum: 180
+              description: Longitude in degrees (WGS 84).
+            altitude:
+              title: Altitude
+              type: number
+              format: double
+              description: Altitude in meters.
+            accuracy:
+              title: Accuracy
+              type: number
+              format: double
+              minimum: 0
+              description: Horizontal accuracy radius in meters.
+          required:
+          - latitude
+          - longitude
+          - altitude
+          - accuracy
+    SensorSpec.lamp.accelerometer10hz:
+      summary: lamp.accelerometer10hz
+      description: 10 Hz accelerometer, uploaded as binary frames through `SensorStream.create`.
+      value:
+        id: lamp.accelerometer10hz
+        settings_schema:
+          type: object
+          description: The sampling rate is fixed by the spec name, so there are no settings.
+          properties: {}
+          maxProperties: 0
+        data_schema:
+          type: object
+          description: One decoded 20-byte record. Records arrive in compressed binary frames through
+            `SensorStream.create`, not as SensorEvents.
+          properties:
+            timestamp:
+              title: Timestamp
+              type: integer
+              format: int64
+              description: 'Sample time: Unix epoch milliseconds.'
+            x:
+              title: X acceleration
+              type: number
+              format: float
+              description: Acceleration along the device x axis, in m/s² (Android axes).
+            y:
+              title: Y acceleration
+              type: number
+              format: float
+              description: Acceleration along the device y axis, in m/s² (Android axes).
+            z:
+              title: Z acceleration
+              type: number
+              format: float
+              description: Acceleration along the device z axis, in m/s² (Android axes). Face up at rest
+                reads about +9.80665.
+          required:
+          - timestamp
+          - x
+          - y
+          - z
+    SensorSpec.lamp.accelerometer20hz:
+      summary: lamp.accelerometer20hz
+      description: 20 Hz accelerometer, uploaded as binary frames through `SensorStream.create`.
+      value:
+        id: lamp.accelerometer20hz
+        settings_schema:
+          type: object
+          description: The sampling rate is fixed by the spec name, so there are no settings.
+          properties: {}
+          maxProperties: 0
+        data_schema:
+          type: object
+          description: One decoded 20-byte record. Records arrive in compressed binary frames through
+            `SensorStream.create`, not as SensorEvents.
+          properties:
+            timestamp:
+              title: Timestamp
+              type: integer
+              format: int64
+              description: 'Sample time: Unix epoch milliseconds.'
+            x:
+              title: X acceleration
+              type: number
+              format: float
+              description: Acceleration along the device x axis, in m/s² (Android axes).
+            y:
+              title: Y acceleration
+              type: number
+              format: float
+              description: Acceleration along the device y axis, in m/s² (Android axes).
+            z:
+              title: Z acceleration
+              type: number
+              format: float
+              description: Acceleration along the device z axis, in m/s² (Android axes). Face up at rest
+                reads about +9.80665.
+          required:
+          - timestamp
+          - x
+          - y
+          - z
+    SensorSpec.lamp.accelerometer50hz:
+      summary: lamp.accelerometer50hz
+      description: 50 Hz accelerometer, uploaded as binary frames through `SensorStream.create`.
+      value:
+        id: lamp.accelerometer50hz
+        settings_schema:
+          type: object
+          description: The sampling rate is fixed by the spec name, so there are no settings.
+          properties: {}
+          maxProperties: 0
+        data_schema:
+          type: object
+          description: One decoded 20-byte record. Records arrive in compressed binary frames through
+            `SensorStream.create`, not as SensorEvents.
+          properties:
+            timestamp:
+              title: Timestamp
+              type: integer
+              format: int64
+              description: 'Sample time: Unix epoch milliseconds.'
+            x:
+              title: X acceleration
+              type: number
+              format: float
+              description: Acceleration along the device x axis, in m/s² (Android axes).
+            y:
+              title: Y acceleration
+              type: number
+              format: float
+              description: Acceleration along the device y axis, in m/s² (Android axes).
+            z:
+              title: Z acceleration
+              type: number
+              format: float
+              description: Acceleration along the device z axis, in m/s² (Android axes). Face up at rest
+                reads about +9.80665.
+          required:
+          - timestamp
+          - x
+          - y
+          - z
+    SensorSpec.lamp.accelerometer100hz:
+      summary: lamp.accelerometer100hz
+      description: 100 Hz accelerometer, uploaded as binary frames through `SensorStream.create`.
+      value:
+        id: lamp.accelerometer100hz
+        settings_schema:
+          type: object
+          description: The sampling rate is fixed by the spec name, so there are no settings.
+          properties: {}
+          maxProperties: 0
+        data_schema:
+          type: object
+          description: One decoded 20-byte record. Records arrive in compressed binary frames through
+            `SensorStream.create`, not as SensorEvents.
+          properties:
+            timestamp:
+              title: Timestamp
+              type: integer
+              format: int64
+              description: 'Sample time: Unix epoch milliseconds.'
+            x:
+              title: X acceleration
+              type: number
+              format: float
+              description: Acceleration along the device x axis, in m/s² (Android axes).
+            y:
+              title: Y acceleration
+              type: number
+              format: float
+              description: Acceleration along the device y axis, in m/s² (Android axes).
+            z:
+              title: Z acceleration
+              type: number
+              format: float
+              description: Acceleration along the device z axis, in m/s² (Android axes). Face up at rest
+                reads about +9.80665.
+          required:
+          - timestamp
+          - x
+          - y
+          - z
+    SensorEvent.lamp.gps1m:
+      summary: lamp.gps1m
+      description: One GPS fix. The `data` shape is the same as `lamp.gps`.
+      value:
+        timestamp: 1790000160000
+        sensor: lamp.gps1m
+        data:
+          latitude: 42.3389
+          longitude: -71.1066
+          altitude: 12.5
+          accuracy: 4.8
+    SensorStreamUpload.lamp.accelerometer10hz:
+      summary: lamp.accelerometer10hz, a full 5-minute window from iOS
+      value:
+        sensor_spec: lamp.accelerometer10hz
+        start_timestamp: 1790000100000
+        end_timestamp: 1790000399900
+        sample_count: 3000
+        codec: openzl
+        codec_format_version: 24
+        platform: ios
+        unit: m/s^2
+        sha256: d8cdf7bcfbb5638cc9e85d367b0c4abf24a4f326db03e7555126eef7b9711c73
+        frame: "<compressed frame bytes>"
+    SensorStreamUpload.lamp.accelerometer20hz:
+      summary: lamp.accelerometer20hz, a full 5-minute window from a 32-bit Android device (zstd)
+      value:
+        sensor_spec: lamp.accelerometer20hz
+        start_timestamp: 1790000100000
+        end_timestamp: 1790000399950
+        sample_count: 6000
+        codec: zstd
+        codec_format_version: 0
+        platform: android
+        unit: m/s^2
+        sha256: 36cd1b470c7e8505d9060cbe9d5a8f0cf8d2aed2e8fc88db9791eb322d677be4
+        frame: "<compressed frame bytes>"
+    SensorStreamUpload.lamp.accelerometer50hz:
+      summary: lamp.accelerometer50hz, the golden test vector frame.openzl
+      value:
+        sensor_spec: lamp.accelerometer50hz
+        start_timestamp: 1790000100000
+        end_timestamp: 1790000109980
+        sample_count: 500
+        codec: openzl
+        codec_format_version: 24
+        platform: android
+        unit: m/s^2
+        sha256: a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6
+        frame: "<contents of test-vectors/sensor-stream/frame.openzl>"
+    SensorStreamUpload.lamp.accelerometer100hz:
+      summary: lamp.accelerometer100hz, the one-record golden vector frame_single.openzl
+      value:
+        sensor_spec: lamp.accelerometer100hz
+        start_timestamp: 1790000100000
+        end_timestamp: 1790000100000
+        sample_count: 1
+        codec: openzl
+        codec_format_version: 24
+        platform: ios
+        unit: m/s^2
+        sha256: 662b784a3b978435433e37b8c47130354d080c19db9d894db564762a9aae438f
+        frame: "<contents of test-vectors/sensor-stream/frame_single.openzl>"
+    SensorStreamFrameList:
+      summary: Two frames in the same 5-minute window
+      description: A window can have more than one frame, for example after a collector restart. Merge them.
+      value:
+        data:
+        - id: 6718a0c2e4b0a1b2c3d4e5f6
+          sensor_spec: lamp.accelerometer50hz
+          start_timestamp: 1790000100000
+          end_timestamp: 1790000109980
+          sample_count: 500
+          codec: openzl
+          codec_format_version: 24
+          platform: android
+          unit: m/s^2
+          sha256: a8ee18c33e9953a183864eea00deacfc3bfa6a300470a05741f6ece8003c15b6
+          byte_length: 4188
+          upload_date: '2026-10-23T12:00:00.000Z'
+        - id: 6718a0c2e4b0a1b2c3d4e5f7
+          sensor_spec: lamp.accelerometer50hz
+          start_timestamp: 1790000110000
+          end_timestamp: 1790000119980
+          sample_count: 500
+          codec: openzl
+          codec_format_version: 24
+          platform: android
+          unit: m/s^2
+          sha256: 07122d5f72b2425f723de9c4f74e5326430c7d9df2cfe2f218e6117944023539
+          byte_length: 4190
+          upload_date: '2026-10-23T12:05:00.000Z'
+        next: null
   securitySchemes:
     Authorization:
       type: http
       scheme: basic
+    MobileToken:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: 'A mobile auth token, sent as `Authorization: Bearer <mobile token>`. The server returns
+        it after a successful credential or OAuth login.'
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: An API key from a system administrator, sent in the `x-api-key` header.

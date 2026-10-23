@@ -15,6 +15,7 @@ import {
   requireOperation,
   resolveRef,
   schemaValidator,
+  validatorAt,
 } from './helpers.mjs';
 
 const doc = loadOpenApi();
@@ -99,7 +100,7 @@ describe(`GET ${COLLECTION}`, () => {
     const op = requireOperation(doc, COLLECTION, 'get');
     const media = op.responses['200'].content['application/json'];
     assert.equal(media.examples?.frames?.$ref, '#/components/examples/SensorStreamFrameList');
-    const validate = ajv.compile(media.schema);
+    const validate = validatorAt(ajv, ['paths', COLLECTION, 'get', 'responses', '200', 'content', 'application/json', 'schema']);
     assertValid(validate, requireExample(doc, 'SensorStreamFrameList'), 'SensorStreamFrameList');
   });
 

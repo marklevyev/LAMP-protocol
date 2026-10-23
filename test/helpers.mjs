@@ -130,6 +130,19 @@ export function schemaValidator(ajv, doc, name) {
   return validate;
 }
 
+/**
+ * Returns a compiled validator for the schema at a JSON pointer inside
+ * `openapi.yml`, given as path segments, so its local `$ref`s resolve.
+ */
+export function validatorAt(ajv, segments) {
+  const pointer = segments
+    .map((s) => encodeURIComponent(String(s).replace(/~/g, '~0').replace(/\//g, '~1')))
+    .join('/');
+  const validate = ajv.getSchema(`${OPENAPI_ID}#/${pointer}`);
+  assert.equal(typeof validate, 'function', `Ajv can't compile #/${segments.join('/')}`);
+  return validate;
+}
+
 /** Returns `components.examples[name].value`, failing with a clear message if it's missing. */
 export function requireExample(doc, name) {
   const example = doc?.components?.examples?.[name];
