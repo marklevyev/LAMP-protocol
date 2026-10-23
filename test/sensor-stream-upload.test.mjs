@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 
 import {
   ACCEL_SPECS,
+  INVALID_METADATA_MUTATIONS,
   UPLOAD_TEXT_FIELDS,
   assertInvalid,
   assertValid,
@@ -36,19 +37,7 @@ function uploadFromMeta(entry) {
 
 /** Invalid variants of a valid upload, each one rule broken. */
 const INVALID_MUTATIONS = {
-  'an unknown sensor_spec': (u) => ({ ...u, sensor_spec: 'lamp.accelerometer' }),
-  'the gps1m spec (JSON only)': (u) => ({ ...u, sensor_spec: 'lamp.gps1m' }),
-  'sample_count 0': (u) => ({ ...u, sample_count: 0 }),
-  'sample_count 66001': (u) => ({ ...u, sample_count: 66001 }),
-  'a non-integer sample_count': (u) => ({ ...u, sample_count: 1.5 }),
-  "codec 'gzip'": (u) => ({ ...u, codec: 'gzip' }),
-  'openzl with codec_format_version 0': (u) => ({ ...u, codec: 'openzl', codec_format_version: 0 }),
-  'zstd with codec_format_version 24': (u) => ({ ...u, codec: 'zstd', codec_format_version: 24 }),
-  "platform 'web'": (u) => ({ ...u, platform: 'web' }),
-  "unit 'g'": (u) => ({ ...u, unit: 'g' }),
-  'an uppercase sha256': (u) => ({ ...u, sha256: u.sha256.toUpperCase() }),
-  'a short sha256': (u) => ({ ...u, sha256: u.sha256.slice(0, 63) }),
-  'a negative start_timestamp': (u) => ({ ...u, start_timestamp: -1 }),
+  ...INVALID_METADATA_MUTATIONS,
   ...Object.fromEntries(
     [...UPLOAD_TEXT_FIELDS, 'frame'].map((field) => [
       `a missing ${field}`,

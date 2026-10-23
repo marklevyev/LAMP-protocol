@@ -6,6 +6,7 @@ import { describe, test } from 'node:test';
 
 import {
   ACCEL_SPECS,
+  INVALID_METADATA_MUTATIONS,
   UPLOAD_TEXT_FIELDS,
   assertInvalid,
   assertValid,
@@ -69,6 +70,20 @@ describe(`POST ${COLLECTION}`, () => {
     assert.deepEqual(securityNames(op), ['Authorization', 'MobileToken']);
     assert.ok(op['x-code-samples']?.length >= 1, 'x-code-samples are missing');
   });
+
+  test('the 200 body requires data.id, and duplicate is a boolean', () => {
+    const validate = validatorAt(ajv, ['paths', COLLECTION, 'post', 'responses', '200', 'content', 'application/json', 'schema']);
+    assertValid(validate, { data: { id: '6718a0c2e4b0a1b2c3d4e5f6' } }, 'stored');
+    assertValid(validate, { data: { id: '6718a0c2e4b0a1b2c3d4e5f6', duplicate: true } }, 'duplicate');
+    for (const [label, bad] of Object.entries({
+      'no data': {},
+      'data without id': { data: { duplicate: true } },
+      'a numeric id': { data: { id: 5 } },
+      "duplicate 'true'": { data: { id: '6718a0c2e4b0a1b2c3d4e5f6', duplicate: 'true' } },
+    })) {
+      assertInvalid(validate, bad, `200 body with ${label}`);
+    }
+  });
 });
 
 describe(`GET ${COLLECTION}`, () => {
@@ -105,6 +120,21 @@ describe(`GET ${COLLECTION}`, () => {
     assertValid(validate, requireExample(doc, 'SensorStreamFrameList'), 'SensorStreamFrameList');
   });
 
+  test('takes from and to as non-negative integer epoch milliseconds', () => {
+    for (const name of ['from', 'to']) {
+      const index = requireOperation(doc, COLLECTION, 'get').parameters.findIndex((p) => resolveRef(doc, p).name === name);
+      const validate = validatorAt(ajv, ['paths', COLLECTION, 'get', 'parameters', index, 'schema']);
+      assertValid(validate, 0, `${name} 0`);
+      assertValid(validate, 1790000100000, `${name} epoch ms`);
+      for (const bad of [-1, 1.5, '1790000100000']) assertInvalid(validate, bad, `${name} ${JSON.stringify(bad)}`);
+    }
+  });
+
+  test('documents the 400 and 403 responses', () => {
+    const op = requireOperation(doc, COLLECTION, 'get');
+    for (const code of ['400', '403']) assert.ok(op.responses?.[code], `response ${code} is missing`);
+  });
+
   test('uses the x-api-key header only', () => {
     assert.deepEqual(securityNames(requireOperation(doc, COLLECTION, 'get')), ['ApiKeyAuth']);
   });
@@ -127,6 +157,18 @@ describe(`GET ${ITEM}`, () => {
   });
 });
 
+describe('security schemes', () => {
+  test('ApiKeyAuth is the x-api-key header', () => {
+    const { type, in: where, name } = doc.components.securitySchemes.ApiKeyAuth;
+    assert.deepEqual({ type, in: where, name }, { type: 'apiKey', in: 'header', name: 'x-api-key' });
+  });
+
+  test('MobileToken is the Authorization header', () => {
+    const { type, in: where, name } = doc.components.securitySchemes.MobileToken;
+    assert.deepEqual({ type, in: where, name }, { type: 'apiKey', in: 'header', name: 'Authorization' });
+  });
+});
+
 describe('SensorStreamFrame schema', () => {
   const FRAME_FIELDS = ['id', ...UPLOAD_TEXT_FIELDS, 'byte_length', 'upload_date'];
 
@@ -143,9 +185,7 @@ describe('SensorStreamFrame schema', () => {
   });
 
   for (const [label, mutate] of Object.entries({
-    "codec 'gzip'": (f) => ({ ...f, codec: 'gzip' }),
-    'openzl with codec_format_version 0': (f) => ({ ...f, codec: 'openzl', codec_format_version: 0 }),
-    'sample_count 0': (f) => ({ ...f, sample_count: 0 }),
+    ...INVALID_METADATA_MUTATIONS,
     'byte_length 0': (f) => ({ ...f, byte_length: 0 }),
     'byte_length over 4 MiB': (f) => ({ ...f, byte_length: 4194305 }),
     'a non-date upload_date': (f) => ({ ...f, upload_date: 'yesterday' }),
