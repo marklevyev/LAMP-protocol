@@ -12,7 +12,7 @@ read back five sensors:
 | `lamp.accelerometer100hz` | 100 Hz | Binary sensor stream |
 
 Every implementation (LAMP-server, LAMP-core-android, LAMP-core-ios,
-LAMP-cortex, LAMP-raphe) tests against the golden vectors in
+LAMP-cortex, Cortex-2.0) tests against the golden vectors in
 [`test-vectors/sensor-stream/`](../test-vectors/sensor-stream/). If this
 document and a vector disagree, fix whichever one is wrong in the same change.
 
@@ -250,7 +250,7 @@ A frame matches when it overlaps `[from, to)`: `end_timestamp >= from` and
 `start_timestamp < to`. Results are sorted by `start_timestamp`, then `id`.
 The server's range is half-open. Each Python loader documents its own range
 convention: LAMP-cortex treats `end` as inclusive (its raw-feature convention),
-and LAMP-raphe uses half-open `[start_ms, end_ms)`.
+and Cortex-2.0 uses half-open `[start_ms, end_ms)`.
 
 ```json
 {

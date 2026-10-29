@@ -1,7 +1,7 @@
 """Validates the OpenZL Python round trip against the sensor-stream contract.
 
 This is the gate that runs before any loader or client work: if it fails, the
-Python decoders in LAMP-cortex and LAMP-raphe can't be trusted.
+Python decoders in LAMP-cortex and Cortex-2.0 can't be trusted.
 
 Usage:
     python3 tools/validate_openzl_roundtrip.py [--vectors DIR]
